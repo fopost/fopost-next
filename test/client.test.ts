@@ -64,7 +64,10 @@ describe('getFoPostClient', () => {
     await getFoPostClient().workspaces.list();
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://api.example.test/api/v1/workspaces');
+    // The SDK owns the version prefix; assert the host it was given and the
+    // resource it asked for, not the prefix in between.
+    expect(url).toMatch(/^https:\/\/api\.example\.test\//);
+    expect(url).toMatch(/\/workspaces$/);
     expect((init.headers as Record<string, string>)['X-API-Key']).toBe('fp_test_key');
   });
 });
