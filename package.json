@@ -1,0 +1,83 @@
+{
+  "name": "@fopost/next",
+  "version": "0.1.0",
+  "description": "Official Next.js integration for the FoPost API. Server-only client, webhook route handlers, and Server Action helpers for scheduling and publishing to +30 social platforms.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fopost/fopost-next.git"
+  },
+  "homepage": "https://fopost.com",
+  "bugs": {
+    "url": "https://github.com/fopost/fopost-next/issues"
+  },
+  "author": "Porter Bridge, LLC",
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@fopost/sdk": "^0.2.2",
+    "server-only": "^0.0.1"
+  },
+  "peerDependencies": {
+    "next": "^14.0.0 || ^15.0.0",
+    "react": "^18.2.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "next": "^15.0.0",
+    "prettier": "^3.4.2",
+    "react": "^19.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "fopost",
+    "next",
+    "nextjs",
+    "app-router",
+    "server-actions",
+    "webhooks",
+    "social-media",
+    "publishing",
+    "scheduling",
+    "api",
+    "sdk",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}
