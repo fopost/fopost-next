@@ -167,7 +167,7 @@ export default createFoPostWebhookApiRoute({
 import { foPostTags, revalidateFoPost } from '@fopost/next';
 
 // Tag a read in a Server Component
-await fetch(`${process.env.FOPOST_BASE_URL}/api/v1/posts?workspace_id=${id}`, {
+await fetch(`${process.env.FOPOST_BASE_URL}/v1/posts?workspace_id=${id}`, {
   headers: { 'X-API-Key': process.env.FOPOST_API_KEY! },
   next: { tags: [foPostTags.posts(id)], revalidate: 60 },
 });

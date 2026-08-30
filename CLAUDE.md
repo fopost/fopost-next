@@ -55,7 +55,7 @@ outside a Next runtime. Do not hoist that import.
 
 Owned by the parent SDK; repeated here only where this package depends on it.
 
-- Base URL `https://api.fopost.com`, paths under `/api/v1/`. Override with `FOPOST_BASE_URL`.
+- Base URL `https://api.fopost.com`, paths under `/v1/`. Override with `FOPOST_BASE_URL`.
 - Auth header is `X-API-Key: <key>`, never `Bearer`.
 - Success envelope `{"data": ...}`; error envelope `{"error": "<code>", "message": "<text>"}`.
   402 may carry `upgrade_url`.
