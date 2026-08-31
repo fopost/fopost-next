@@ -1,6 +1,6 @@
 {
   "name": "@fopost/next",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official Next.js integration for the FoPost API. Server-only client, webhook route handlers, and Server Action helpers for scheduling and publishing to +30 social platforms.",
   "license": "MIT",
   "type": "module",
