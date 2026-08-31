@@ -35,7 +35,7 @@ If you see `This module cannot be imported from a Client Component module`, a `'
 | `FOPOST_BASE_URL`       | no       | Override the API base URL                                  |
 | `FOPOST_WEBHOOK_SECRET` | webhooks | Signing secret of the webhook you created in the dashboard |
 
-Get a key at [app.fopost.com/api-keys](https://app.fopost.com/api-keys).
+Get a key at [fopost.com/dashboard/api-keys](https://fopost.com/dashboard/api-keys).
 
 ## Server Component
 
