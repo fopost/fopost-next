@@ -121,10 +121,10 @@ instance, so stub `fetch` **before** the first `getFoPostClient()` call and use
 
 Tag `v<version>` matching `package.json`; `.github/workflows/release.yml` publishes to npm.
 It mirrors `fopost-js/.github/workflows/release.yml` exactly so both packages release the same way:
-`id-token: write` for npm **provenance**, `npm publish --access public --provenance`, authenticated
-with the repo secret **`NPM_TOKEN`**. Not OIDC trusted publishing — the parent does not use it, and
-matching the parent is the requirement. If `fopost-js` moves to trusted publishing, move this one in
-the same pass.
+`id-token: write`, `npm publish --access public --provenance`, authenticated with OIDC trusted
+publishing (npm >= 11.5.1, so the job upgrades npm first), with no `NPM_TOKEN` secret. The parent
+publishes the same way, and matching the parent is the requirement; if `fopost-js` changes how it
+publishes, move this one in the same pass.
 
 The workflow verifies the tag matches `package.json`, runs typecheck/test/build, smoke-tests the
 packed tarball under `--conditions=react-server` (both ESM and CJS), asserts the `server-only`
