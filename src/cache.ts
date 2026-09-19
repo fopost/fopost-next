@@ -17,6 +17,8 @@ export const foPostTags = {
   accounts: (workspaceId?: string): string =>
     workspaceId ? `${FOPOST_TAG_PREFIX}:accounts:${workspaceId}` : `${FOPOST_TAG_PREFIX}:accounts`,
   account: (accountId: string): string => `${FOPOST_TAG_PREFIX}:account:${accountId}`,
+  media: (workspaceId?: string): string =>
+    workspaceId ? `${FOPOST_TAG_PREFIX}:media:${workspaceId}` : `${FOPOST_TAG_PREFIX}:media`,
   analytics: (workspaceId?: string): string =>
     workspaceId
       ? `${FOPOST_TAG_PREFIX}:analytics:${workspaceId}`
