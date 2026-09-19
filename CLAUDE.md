@@ -84,8 +84,9 @@ Events (`WEBHOOK_EVENTS` in `apps/api/src/handlers/webhooks.ts`): `post.publishe
 ## Parent Dependency
 
 `@fopost/sdk` is published on npm and declared as a normal `dependencies` entry, so CI resolves it
-from the registry with no shim. The constraint is `^0.2.2`: `0.2.1` and `0.2.2` are the only
-published versions, so a `^0.1` range would not install.
+from the registry with no shim. The constraint is `^0.3.0`, the first release with the `inbox` and
+`ads` resources. On a `0.x` version a caret range stays within the minor, so `^0.2` would not pick
+it up.
 
 `next` and `react` are peer dependencies (`^14 || ^15` and `^18.2 || ^19`) and dev dependencies, so
 CI can typecheck against them without forcing a version on consumers.

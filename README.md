@@ -200,7 +200,7 @@ await fopost.accounts.list({ workspaceId });
 await fopost.ai.generateCaption({ currentCaption: 'shipping today' });
 ```
 
-See the [`@fopost/sdk` README](https://github.com/fopost/fopost-js#readme) for the full surface — `posts`, `accounts`, `workspaces`, `labels`, `ai` — plus retries, error handling and the transport contract.
+See the [`@fopost/sdk` README](https://github.com/fopost/fopost-js#readme) for the full surface — `posts`, `accounts`, `workspaces`, `labels`, `ai`, `inbox`, `ads` — plus retries, error handling and the transport contract.
 
 ## Examples
 
