@@ -6,7 +6,7 @@
  * error class does not survive it.
  */
 
-import type { CreatePostInput, Post, UpdatePostInput } from '@fopost/sdk';
+import type { CreatePostInput, Post, UpdatePostInput, UploadedMedia } from '@fopost/sdk';
 import { getFoPostClient, type FoPostClientOptions } from './client.js';
 import { toSerializableError, type FoPostActionResult } from './errors.js';
 import { revalidateFoPost, type FoPostRevalidateTargets } from './cache.js';
@@ -75,4 +75,36 @@ export function deletePostAction(
   options: FoPostActionOptions = {},
 ): (id: string) => Promise<FoPostActionResult<void>> {
   return createFoPostAction((fopost, id: string) => fopost.posts.delete(id), options);
+}
+
+/**
+ * Builds an `upload media` Server Action that takes a form submission.
+ *
+ * The form carries `workspaceId` and a `file` entry; the bytes go straight from the
+ * server to storage through `media.uploadDirect`.
+ *
+ * ```tsx
+ * <form action={uploadMedia}>
+ *   <input type="hidden" name="workspaceId" value={WORKSPACE_ID} />
+ *   <input type="file" name="file" />
+ * </form>
+ * ```
+ */
+export function uploadMediaAction(
+  options: FoPostActionOptions = {},
+): (formData: FormData) => Promise<FoPostActionResult<UploadedMedia>> {
+  return createFoPostAction((fopost, formData: FormData) => {
+    const workspaceId = formData.get('workspaceId');
+    const file = formData.get('file');
+    if (typeof workspaceId !== 'string' || workspaceId === '') {
+      throw new TypeError('workspaceId is required');
+    }
+    if (!(file instanceof Blob)) throw new TypeError('file is required');
+    return fopost.media.uploadDirect({
+      workspaceId,
+      filename: file instanceof File ? file.name : 'upload',
+      mimeType: file.type || 'application/octet-stream',
+      data: file,
+    });
+  }, options);
 }
