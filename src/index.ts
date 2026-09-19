@@ -65,6 +65,7 @@ export {
   updatePostAction,
   publishPostAction,
   deletePostAction,
+  uploadMediaAction,
   type FoPostActionOptions,
 } from './actions.js';
 

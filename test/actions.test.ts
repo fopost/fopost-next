@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DirectUploadInput } from '@fopost/sdk';
 import {
   FOPOST_API_KEY_ENV,
   createFoPostAction,
   createPostAction,
   publishPostAction,
   resetFoPostClientCache,
+  uploadMediaAction,
 } from '../src/index.js';
 
 const ORIGINAL_ENV = { ...process.env };
@@ -148,5 +150,54 @@ describe('Server Action helpers', () => {
     expect(revalidatePath).toHaveBeenCalledWith('/posts');
 
     vi.doUnmock('next/cache');
+  });
+
+  it('uploadMediaAction hands the file name, type and bytes to media.uploadDirect', async () => {
+    const stored = {
+      id: 'm_1',
+      type: 'image',
+      name: 'logo.png',
+      url: 'u',
+      previewUrl: 'p',
+      size: 3,
+    };
+    const uploadDirect = vi.fn(async (_input: DirectUploadInput) => stored);
+    vi.doMock('../src/client.js', () => ({
+      getFoPostClient: () => ({ media: { uploadDirect } }),
+    }));
+
+    // actions.js is already cached from the top-level import; drop it so the mock applies.
+    vi.resetModules();
+    const { uploadMediaAction } = await import('../src/actions.js');
+    const formData = new FormData();
+    formData.set('workspaceId', 'w_1');
+    formData.set('file', new File([new Uint8Array([1, 2, 3])], 'logo.png', { type: 'image/png' }));
+
+    const result = await uploadMediaAction()(formData);
+
+    expect(result).toEqual({ ok: true, data: stored });
+    expect(uploadDirect).toHaveBeenCalledTimes(1);
+    const input = uploadDirect.mock.calls[0]![0];
+    expect(input.workspaceId).toBe('w_1');
+    expect(input.filename).toBe('logo.png');
+    expect(input.mimeType).toBe('image/png');
+    expect(new Uint8Array(await (input.data as Blob).arrayBuffer())).toEqual(
+      new Uint8Array([1, 2, 3]),
+    );
+
+    vi.doUnmock('../src/client.js');
+    vi.resetModules();
+  });
+
+  it('uploadMediaAction fails without a file', async () => {
+    const formData = new FormData();
+    formData.set('workspaceId', 'w_1');
+
+    const result = await uploadMediaAction()(formData);
+    expect(result).toEqual({
+      ok: false,
+      error: { message: 'file is required', status: null, code: 'TypeError' },
+    });
+    expect(structuredClone(result)).toEqual(result);
   });
 });
