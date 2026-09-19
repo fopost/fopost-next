@@ -103,7 +103,27 @@ import { composeAndPublish } from './actions';
 | `updatePostAction()`     | `posts.update`           |
 | `publishPostAction()`    | `posts.publish`          |
 | `deletePostAction()`     | `posts.delete`           |
+| `uploadMediaAction()`    | `media.uploadDirect`     |
 | `createFoPostAction(fn)` | anything else in the SDK |
+
+`uploadMediaAction()` takes the `FormData` of a form with a `workspaceId` field and a `file` input, streams the bytes from the server to storage, and returns the stored item (`{ id, type, name, url, previewUrl, size }`).
+
+```ts
+// app/media/actions.ts
+'use server';
+import { uploadMediaAction, foPostTags } from '@fopost/next';
+
+export const uploadMedia = uploadMediaAction({
+  revalidate: { tags: [foPostTags.media(WORKSPACE_ID)] },
+});
+```
+
+```tsx
+<form action={uploadMedia}>
+  <input type="hidden" name="workspaceId" value={WORKSPACE_ID} />
+  <input type="file" name="file" />
+</form>
+```
 
 Publishing is **create then publish**, and `publish` resolves when delivery is queued, not when the post is live. The `post.published` webhook tells you it landed.
 
@@ -183,6 +203,7 @@ await revalidateFoPost({ tags: [foPostTags.posts(id)], paths: ['/posts'] });
 | `foPostTags.post(postId)`                              | one post                |
 | `foPostTags.accounts(workspaceId?)`                    | connected accounts      |
 | `foPostTags.account(accountId)`                        | one account             |
+| `foPostTags.media(workspaceId?)`                       | a workspace's media     |
 | `foPostTags.workspaces()` / `foPostTags.workspace(id)` | workspaces              |
 | `foPostTags.analytics(workspaceId?)`                   | analytics reads         |
 
