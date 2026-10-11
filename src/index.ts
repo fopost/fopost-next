@@ -36,6 +36,7 @@ export {
 
 export {
   createFoPostWebhookHandler,
+  articleWebhook,
   verifyFoPostSignature,
   signFoPostPayload,
   defaultRevalidateTargets,
@@ -46,6 +47,8 @@ export {
   FOPOST_EVENT_HEADER,
   FOPOST_DELIVERY_HEADER,
   FOPOST_WEBHOOK_SECRET_ENV,
+  type ArticleWebhookContext,
+  type ArticleWebhookOptions,
   type CreateFoPostWebhookHandlerOptions,
   type FoPostWebhookContext,
   type FoPostWebhookEvent,

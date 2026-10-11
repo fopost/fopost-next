@@ -1,5 +1,5 @@
 /**
- * FoPost webhook verification and an App Router `POST` handler.
+ * FoPost webhook verification and App Router `POST` handlers.
  *
  * The API signs the exact bytes it sends:
  *
@@ -16,7 +16,13 @@
  */
 
 import { createHmac } from 'node:crypto';
-import { verifyWebhookSignature } from '@fopost/sdk';
+import {
+  verifyWebhook,
+  verifyWebhookSignature,
+  WebhookError,
+  type ArticlePublishedPayload,
+  type WebhookEvent,
+} from '@fopost/sdk';
 import { revalidateFoPost, foPostTags, type FoPostRevalidateTargets } from './cache.js';
 
 export const FOPOST_SIGNATURE_HEADER = 'x-fopost-signature';
@@ -35,6 +41,7 @@ export const FOPOST_WEBHOOK_EVENTS = [
   'delivery.failed',
   'delivery.delayed',
   'account.health_changed',
+  'article.published',
 ] as const;
 
 export type FoPostWebhookEvent = (typeof FOPOST_WEBHOOK_EVENTS)[number];
@@ -228,5 +235,67 @@ export function createFoPostWebhookHandler(
     }
 
     return json({ received: true }, 200);
+  };
+}
+
+export interface ArticleWebhookContext {
+  /** Value of `X-FoPost-Delivery`, or `null` when the header is absent. */
+  deliveryId: string | null;
+  request: Request;
+}
+
+export interface ArticleWebhookOptions {
+  /** The website secret from the blog settings. Defaults to `process.env.FOPOST_WEBHOOK_SECRET`. */
+  secret?: string;
+  /** Receives each published article. Return the URL it now lives at to echo it back to FoPost. */
+  onArticlePublished: (
+    article: ArticlePublishedPayload,
+    context: ArticleWebhookContext,
+  ) => string | void | Promise<string | void>;
+}
+
+/**
+ * Builds the App Router `POST` handler a website target delivers articles to.
+ * Answers `{ ok: true }` to `article.test` and hands `article.published` to the callback.
+ *
+ * ```ts
+ * // app/api/fopost/articles/route.ts
+ * export const POST = articleWebhook({
+ *   onArticlePublished: async (article) => `https://yourbrand.com/blog/${article.slug}`,
+ * });
+ * ```
+ */
+export function articleWebhook(
+  options: ArticleWebhookOptions,
+): (request: Request) => Promise<Response> {
+  return async function POST(request: Request): Promise<Response> {
+    const secret = options.secret ?? process.env[FOPOST_WEBHOOK_SECRET_ENV];
+    if (!secret) return notConfigured('articleWebhook');
+
+    const rawBody = await request.text();
+    let envelope: WebhookEvent;
+    try {
+      envelope = await verifyWebhook(rawBody, request.headers, secret);
+    } catch (error) {
+      if (error instanceof WebhookError && error.code === 'invalid_body') {
+        return json({ error: 'invalid_payload', message: 'Body is not valid JSON.' }, 400);
+      }
+      return json({ error: 'invalid_signature', message: 'Signature verification failed.' }, 401);
+    }
+
+    if (envelope.event === 'article.test') return json({ ok: true }, 200);
+    if (envelope.event !== 'article.published') {
+      return json({ error: 'unknown_event', message: 'Missing or unrecognized event.' }, 400);
+    }
+
+    try {
+      const url = await options.onArticlePublished(envelope.data as ArticlePublishedPayload, {
+        deliveryId: request.headers.get(FOPOST_DELIVERY_HEADER),
+        request,
+      });
+      return json(typeof url === 'string' ? { url } : { ok: true }, 200);
+    } catch {
+      return json({ error: 'handler_failed', message: 'Webhook handler threw.' }, 500);
+    }
   };
 }
