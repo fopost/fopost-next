@@ -44,7 +44,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@fopost/sdk": "^0.2.2",
+    "@fopost/sdk": "github:fopost/fopost-js#feature/blog-articles",
     "server-only": "^0.0.1"
   },
   "peerDependencies": {
