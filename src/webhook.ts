@@ -3,19 +3,25 @@
  *
  * The API signs the exact bytes it sends:
  *
- *   X-FoPost-Signature: sha256=<hex HMAC-SHA256 of the raw body, keyed by the secret>
- *   X-FoPost-Event:     post.published
- *   X-FoPost-Delivery:  <delivery id>
+ *   X-FoPost-Signature:     sha256=<hex HMAC-SHA256 of the raw body, keyed by the secret>
+ *   X-FoPost-Timestamp:     <unix seconds>
+ *   X-FoPost-Signature-256: sha256=<hex HMAC-SHA256 of "<timestamp>.<raw body>">
+ *   X-FoPost-Event:         post.published
+ *   X-FoPost-Delivery:      <delivery id>
  *
- * The raw body must be verified before it is parsed. Re-serializing parsed JSON
- * changes the bytes (key order, whitespace, number formatting) and the signature
- * would no longer match.
+ * Verification is the SDK's (`verifyWebhookSignature` in `@fopost/sdk`): the timestamped
+ * signature is preferred and refused past 300 s; the body-only one is accepted only when no
+ * timestamp header is present. The raw body must be verified before it is parsed, since
+ * re-serializing parsed JSON changes the bytes the signature covers.
  */
 
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { verifyWebhookSignature } from '@fopost/sdk';
 import { revalidateFoPost, foPostTags, type FoPostRevalidateTargets } from './cache.js';
 
 export const FOPOST_SIGNATURE_HEADER = 'x-fopost-signature';
+export const FOPOST_TIMESTAMP_HEADER = 'x-fopost-timestamp';
+export const FOPOST_TIMESTAMPED_SIGNATURE_HEADER = 'x-fopost-signature-256';
 export const FOPOST_EVENT_HEADER = 'x-fopost-event';
 export const FOPOST_DELIVERY_HEADER = 'x-fopost-delivery';
 export const FOPOST_WEBHOOK_SECRET_ENV = 'FOPOST_WEBHOOK_SECRET';
@@ -71,36 +77,43 @@ export interface CreateFoPostWebhookHandlerOptions {
   onError?: (error: unknown, context: FoPostWebhookContext) => void | Promise<void>;
 }
 
-/** Timing-safe compare of two strings of arbitrary length. */
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  // timingSafeEqual throws on a length mismatch, and the length is not a secret.
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}
-
-/** Computes the header value the API would send for these exact bytes. */
+/** Computes the body-only `X-FoPost-Signature` value the API would send for these exact bytes. */
 export function signFoPostPayload(rawBody: string, secret: string): string {
   return `sha256=${createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')}`;
 }
 
+/** Headers as a `Headers` instance or the plain object Node hands out. */
+export type FoPostWebhookHeaders = Headers | Record<string, string | string[] | undefined>;
+
 export interface VerifyFoPostSignatureInput {
   /** The raw request body. Never a re-serialized object. */
   rawBody: string;
-  /** The `X-FoPost-Signature` header value, `sha256=` prefix included. */
-  signature: string | null | undefined;
+  /** The request headers. Carries the timestamped signature, which is preferred. */
+  headers?: FoPostWebhookHeaders;
+  /** The `X-FoPost-Signature` value alone, when the headers are not at hand. Body-only check. */
+  signature?: string | null;
   secret: string;
 }
 
-/** Returns true when the signature matches the raw body. Never throws. */
-export function verifyFoPostSignature({
+/**
+ * Returns true when the delivery verifies. Never throws. Delegates to the SDK: the
+ * timestamped signature wins and is refused after 300 s; the body-only signature is the
+ * fallback when no timestamp header was sent.
+ */
+export async function verifyFoPostSignature({
   rawBody,
+  headers,
   signature,
   secret,
-}: VerifyFoPostSignatureInput): boolean {
-  if (!signature || !secret) return false;
-  return safeEqual(signature.trim(), signFoPostPayload(rawBody, secret));
+}: VerifyFoPostSignatureInput): Promise<boolean> {
+  if (!secret) return false;
+  const source = headers ?? (signature ? { [FOPOST_SIGNATURE_HEADER]: signature.trim() } : {});
+  try {
+    await verifyWebhookSignature(rawBody, source, secret);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isWebhookEvent(value: unknown): value is FoPostWebhookEvent {
@@ -134,6 +147,16 @@ function json(body: unknown, status: number): Response {
   });
 }
 
+function notConfigured(factory: string): Response {
+  return json(
+    {
+      error: 'webhook_not_configured',
+      message: `Set ${FOPOST_WEBHOOK_SECRET_ENV} or pass { secret } to ${factory}().`,
+    },
+    500,
+  );
+}
+
 async function runRevalidation(
   options: CreateFoPostWebhookHandlerOptions,
   context: FoPostWebhookContext,
@@ -164,21 +187,12 @@ export function createFoPostWebhookHandler(
 ): (request: Request) => Promise<Response> {
   return async function POST(request: Request): Promise<Response> {
     const secret = options.secret ?? process.env[FOPOST_WEBHOOK_SECRET_ENV];
-    if (!secret) {
-      return json(
-        {
-          error: 'webhook_not_configured',
-          message: `Set ${FOPOST_WEBHOOK_SECRET_ENV} or pass { secret } to createFoPostWebhookHandler().`,
-        },
-        500,
-      );
-    }
+    if (!secret) return notConfigured('createFoPostWebhookHandler');
 
     // Read the bytes first. Parsing before verifying would defeat the signature.
     const rawBody = await request.text();
-    const signature = request.headers.get(FOPOST_SIGNATURE_HEADER);
 
-    if (!verifyFoPostSignature({ rawBody, signature, secret })) {
+    if (!(await verifyFoPostSignature({ rawBody, headers: request.headers, secret }))) {
       return json({ error: 'invalid_signature', message: 'Signature verification failed.' }, 401);
     }
 

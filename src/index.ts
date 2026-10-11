@@ -41,6 +41,8 @@ export {
   defaultRevalidateTargets,
   FOPOST_WEBHOOK_EVENTS,
   FOPOST_SIGNATURE_HEADER,
+  FOPOST_TIMESTAMP_HEADER,
+  FOPOST_TIMESTAMPED_SIGNATURE_HEADER,
   FOPOST_EVENT_HEADER,
   FOPOST_DELIVERY_HEADER,
   FOPOST_WEBHOOK_SECRET_ENV,
@@ -48,6 +50,7 @@ export {
   type FoPostWebhookContext,
   type FoPostWebhookEvent,
   type FoPostWebhookHandlerFn,
+  type FoPostWebhookHeaders,
   type FoPostWebhookPayload,
   type VerifyFoPostSignatureInput,
 } from './webhook.js';
