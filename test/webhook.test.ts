@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   FOPOST_DELIVERY_HEADER,
   FOPOST_SIGNATURE_HEADER,
+  FOPOST_TIMESTAMP_HEADER,
+  FOPOST_TIMESTAMPED_SIGNATURE_HEADER,
   createFoPostWebhookHandler,
   signFoPostPayload,
   verifyFoPostSignature,
@@ -28,34 +30,60 @@ const PAYLOAD = JSON.stringify({
   timestamp: '2026-08-30T10:00:00.000Z',
 });
 
+function signTimestamped(rawBody: string, timestamp: number, secret = SECRET): string {
+  return `sha256=${createHmac('sha256', secret).update(`${timestamp}.${rawBody}`, 'utf8').digest('hex')}`;
+}
+
 describe('verifyFoPostSignature', () => {
-  it('matches the scheme the API uses: sha256=<hex hmac of the raw body>', () => {
+  it('matches the scheme the API uses: sha256=<hex hmac of the raw body>', async () => {
     expect(signFoPostPayload(PAYLOAD, SECRET)).toBe(sign(PAYLOAD));
-    expect(
+    await expect(
       verifyFoPostSignature({ rawBody: PAYLOAD, signature: sign(PAYLOAD), secret: SECRET }),
-    ).toBe(true);
+    ).resolves.toBe(true);
   });
 
-  it('returns false rather than throwing on a missing or malformed signature', () => {
-    expect(verifyFoPostSignature({ rawBody: PAYLOAD, signature: null, secret: SECRET })).toBe(
-      false,
-    );
-    expect(verifyFoPostSignature({ rawBody: PAYLOAD, signature: 'garbage', secret: SECRET })).toBe(
-      false,
-    );
-    expect(verifyFoPostSignature({ rawBody: PAYLOAD, signature: sign(PAYLOAD), secret: '' })).toBe(
-      false,
-    );
+  it('returns false rather than throwing on a missing or malformed signature', async () => {
+    await expect(
+      verifyFoPostSignature({ rawBody: PAYLOAD, signature: null, secret: SECRET }),
+    ).resolves.toBe(false);
+    await expect(
+      verifyFoPostSignature({ rawBody: PAYLOAD, signature: 'garbage', secret: SECRET }),
+    ).resolves.toBe(false);
+    await expect(
+      verifyFoPostSignature({ rawBody: PAYLOAD, signature: sign(PAYLOAD), secret: '' }),
+    ).resolves.toBe(false);
   });
 
-  it('rejects a signature made with a different secret', () => {
-    expect(
+  it('rejects a signature made with a different secret', async () => {
+    await expect(
       verifyFoPostSignature({
         rawBody: PAYLOAD,
         signature: sign(PAYLOAD, 'other'),
         secret: SECRET,
       }),
-    ).toBe(false);
+    ).resolves.toBe(false);
+  });
+
+  it('prefers the timestamped signature and refuses one older than 300 s', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const fresh = {
+      [FOPOST_TIMESTAMP_HEADER]: String(now),
+      [FOPOST_TIMESTAMPED_SIGNATURE_HEADER]: signTimestamped(PAYLOAD, now),
+    };
+    await expect(
+      verifyFoPostSignature({ rawBody: PAYLOAD, headers: fresh, secret: SECRET }),
+    ).resolves.toBe(true);
+
+    // A valid body-only signature does not rescue a stale timestamped one.
+    const stale = now - 301;
+    const headers = {
+      [FOPOST_SIGNATURE_HEADER]: sign(PAYLOAD),
+      [FOPOST_TIMESTAMP_HEADER]: String(stale),
+      [FOPOST_TIMESTAMPED_SIGNATURE_HEADER]: signTimestamped(PAYLOAD, stale),
+    };
+    await expect(
+      verifyFoPostSignature({ rawBody: PAYLOAD, headers, secret: SECRET }),
+    ).resolves.toBe(false);
   });
 });
 

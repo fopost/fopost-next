@@ -11,6 +11,8 @@ import {
   FOPOST_DELIVERY_HEADER,
   FOPOST_EVENT_HEADER,
   FOPOST_SIGNATURE_HEADER,
+  FOPOST_TIMESTAMPED_SIGNATURE_HEADER,
+  FOPOST_TIMESTAMP_HEADER,
   createFoPostWebhookHandler,
   type CreateFoPostWebhookHandlerOptions,
 } from './webhook.js';
@@ -80,7 +82,13 @@ export function createFoPostWebhookApiRoute(
     }
 
     const headers = new Headers({ 'content-type': 'application/json' });
-    for (const name of [FOPOST_SIGNATURE_HEADER, FOPOST_EVENT_HEADER, FOPOST_DELIVERY_HEADER]) {
+    for (const name of [
+      FOPOST_SIGNATURE_HEADER,
+      FOPOST_TIMESTAMP_HEADER,
+      FOPOST_TIMESTAMPED_SIGNATURE_HEADER,
+      FOPOST_EVENT_HEADER,
+      FOPOST_DELIVERY_HEADER,
+    ]) {
       const value = headerValue(req.headers[name]);
       if (value) headers.set(name, value);
     }

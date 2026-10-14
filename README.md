@@ -132,12 +132,14 @@ Publishing is **create then publish**, and `publish` resolves when delivery is q
 The API signs the exact bytes it sends:
 
 ```
-X-FoPost-Signature: sha256=<hex HMAC-SHA256 of the raw body, keyed by your webhook secret>
-X-FoPost-Event:     post.published
-X-FoPost-Delivery:  <delivery id>
+X-FoPost-Signature:     sha256=<hex HMAC-SHA256 of the raw body, keyed by your webhook secret>
+X-FoPost-Timestamp:     <unix seconds>
+X-FoPost-Signature-256: sha256=<hex HMAC-SHA256 of "<timestamp>.<raw body>">
+X-FoPost-Event:         post.published
+X-FoPost-Delivery:      <delivery id>
 ```
 
-The handler reads the raw body **before** parsing it, verifies with a constant-time compare, and answers `401` on a mismatch. Re-serializing the parsed JSON would change the bytes and break verification, which is exactly the mistake this helper removes.
+The handler reads the raw body **before** parsing it and verifies through `@fopost/sdk`: the timestamped `X-FoPost-Signature-256` is preferred and refused after 300 seconds, the body-only `X-FoPost-Signature` is accepted only when no timestamp header is sent, and a mismatch answers `401`. Re-serializing the parsed JSON would change the bytes and break verification, which is exactly the mistake this helper removes.
 
 ```ts
 // app/api/fopost/webhook/route.ts
@@ -158,11 +160,11 @@ export const POST = createFoPostWebhookHandler({
 });
 ```
 
-Events: `post.published`, `post.failed`, `post.partially_failed`, `delivery.published`, `delivery.failed`, `delivery.delayed`, `account.health_changed`.
+Events: `post.published`, `post.failed`, `post.partially_failed`, `delivery.published`, `delivery.failed`, `delivery.delayed`, `account.health_changed`, `article.published`.
 
 Responses: `200 {"received":true}` · `401 invalid_signature` · `400 invalid_payload` / `unknown_event` · `500 webhook_not_configured` / `handler_failed`.
 
-`verifyFoPostSignature({ rawBody, signature, secret })` is exported if you want to verify by hand.
+`await verifyFoPostSignature({ rawBody, headers, secret })` is exported if you want to verify by hand; pass `signature` instead of `headers` for a body-only check.
 
 ### Pages Router
 
@@ -178,6 +180,26 @@ export default createFoPostWebhookApiRoute({
   on: { 'post.published': async ({ payload }) => recordPublished(payload.data) },
 });
 ```
+
+## Receive blog articles
+
+A blog with a `website` target POSTs every published article to your site as a signed `article.published` delivery, and a test from the blog settings sends `article.test`. Mount the receiver and set `FOPOST_WEBHOOK_SECRET` to the website secret shown when you saved the URL, or pass it as `secret`.
+
+```ts
+// app/api/fopost/articles/route.ts
+import { articleWebhook } from '@fopost/next';
+
+export const POST = articleWebhook({
+  onArticlePublished: async (article) => {
+    await saveArticle(article); // id, title, slug, bodyMarkdown, bodyHtml, images, tags, ...
+    return `https://yourbrand.com/blog/${article.slug}`; // optional, echoed back as { url }
+  },
+});
+```
+
+The receiver verifies the signature, answers `200 {"ok":true}` to a test, hands the typed `ArticlePublishedPayload` to your callback, and answers `{"url": "..."}` when the callback returns one. Image URLs in the payload stay fetchable for 6 hours, so download and store your own copy.
+
+The `blog` resource itself (settings, keywords, articles) is on the client: `getFoPostClient().blog.listArticles(workspaceId)`.
 
 ## Caching and revalidation
 
@@ -219,9 +241,10 @@ import { getFoPostClient, FoPostError } from '@fopost/next';
 const fopost = getFoPostClient();
 await fopost.accounts.list({ workspaceId });
 await fopost.ai.generateCaption({ currentCaption: 'shipping today' });
+await fopost.blog.listArticles(workspaceId);
 ```
 
-See the [`@fopost/sdk` README](https://github.com/fopost/fopost-js#readme) for the full surface — `posts`, `accounts`, `workspaces`, `labels`, `ai` — plus retries, error handling and the transport contract.
+See the [`@fopost/sdk` README](https://github.com/fopost/fopost-js#readme) for the full surface — `posts`, `accounts`, `workspaces`, `labels`, `ai`, `blog` — plus retries, error handling and the transport contract.
 
 ## Examples
 

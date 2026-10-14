@@ -1,21 +1,33 @@
 /**
- * FoPost webhook verification and an App Router `POST` handler.
+ * FoPost webhook verification and App Router `POST` handlers.
  *
  * The API signs the exact bytes it sends:
  *
- *   X-FoPost-Signature: sha256=<hex HMAC-SHA256 of the raw body, keyed by the secret>
- *   X-FoPost-Event:     post.published
- *   X-FoPost-Delivery:  <delivery id>
+ *   X-FoPost-Signature:     sha256=<hex HMAC-SHA256 of the raw body, keyed by the secret>
+ *   X-FoPost-Timestamp:     <unix seconds>
+ *   X-FoPost-Signature-256: sha256=<hex HMAC-SHA256 of "<timestamp>.<raw body>">
+ *   X-FoPost-Event:         post.published
+ *   X-FoPost-Delivery:      <delivery id>
  *
- * The raw body must be verified before it is parsed. Re-serializing parsed JSON
- * changes the bytes (key order, whitespace, number formatting) and the signature
- * would no longer match.
+ * Verification is the SDK's (`verifyWebhookSignature` in `@fopost/sdk`): the timestamped
+ * signature is preferred and refused past 300 s; the body-only one is accepted only when no
+ * timestamp header is present. The raw body must be verified before it is parsed, since
+ * re-serializing parsed JSON changes the bytes the signature covers.
  */
 
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import {
+  verifyWebhook,
+  verifyWebhookSignature,
+  WebhookError,
+  type ArticlePublishedPayload,
+  type WebhookEvent,
+} from '@fopost/sdk';
 import { revalidateFoPost, foPostTags, type FoPostRevalidateTargets } from './cache.js';
 
 export const FOPOST_SIGNATURE_HEADER = 'x-fopost-signature';
+export const FOPOST_TIMESTAMP_HEADER = 'x-fopost-timestamp';
+export const FOPOST_TIMESTAMPED_SIGNATURE_HEADER = 'x-fopost-signature-256';
 export const FOPOST_EVENT_HEADER = 'x-fopost-event';
 export const FOPOST_DELIVERY_HEADER = 'x-fopost-delivery';
 export const FOPOST_WEBHOOK_SECRET_ENV = 'FOPOST_WEBHOOK_SECRET';
@@ -29,6 +41,7 @@ export const FOPOST_WEBHOOK_EVENTS = [
   'delivery.failed',
   'delivery.delayed',
   'account.health_changed',
+  'article.published',
 ] as const;
 
 export type FoPostWebhookEvent = (typeof FOPOST_WEBHOOK_EVENTS)[number];
@@ -71,36 +84,43 @@ export interface CreateFoPostWebhookHandlerOptions {
   onError?: (error: unknown, context: FoPostWebhookContext) => void | Promise<void>;
 }
 
-/** Timing-safe compare of two strings of arbitrary length. */
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  // timingSafeEqual throws on a length mismatch, and the length is not a secret.
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}
-
-/** Computes the header value the API would send for these exact bytes. */
+/** Computes the body-only `X-FoPost-Signature` value the API would send for these exact bytes. */
 export function signFoPostPayload(rawBody: string, secret: string): string {
   return `sha256=${createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')}`;
 }
 
+/** Headers as a `Headers` instance or the plain object Node hands out. */
+export type FoPostWebhookHeaders = Headers | Record<string, string | string[] | undefined>;
+
 export interface VerifyFoPostSignatureInput {
   /** The raw request body. Never a re-serialized object. */
   rawBody: string;
-  /** The `X-FoPost-Signature` header value, `sha256=` prefix included. */
-  signature: string | null | undefined;
+  /** The request headers. Carries the timestamped signature, which is preferred. */
+  headers?: FoPostWebhookHeaders;
+  /** The `X-FoPost-Signature` value alone, when the headers are not at hand. Body-only check. */
+  signature?: string | null;
   secret: string;
 }
 
-/** Returns true when the signature matches the raw body. Never throws. */
-export function verifyFoPostSignature({
+/**
+ * Returns true when the delivery verifies. Never throws. Delegates to the SDK: the
+ * timestamped signature wins and is refused after 300 s; the body-only signature is the
+ * fallback when no timestamp header was sent.
+ */
+export async function verifyFoPostSignature({
   rawBody,
+  headers,
   signature,
   secret,
-}: VerifyFoPostSignatureInput): boolean {
-  if (!signature || !secret) return false;
-  return safeEqual(signature.trim(), signFoPostPayload(rawBody, secret));
+}: VerifyFoPostSignatureInput): Promise<boolean> {
+  if (!secret) return false;
+  const source = headers ?? (signature ? { [FOPOST_SIGNATURE_HEADER]: signature.trim() } : {});
+  try {
+    await verifyWebhookSignature(rawBody, source, secret);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isWebhookEvent(value: unknown): value is FoPostWebhookEvent {
@@ -134,6 +154,16 @@ function json(body: unknown, status: number): Response {
   });
 }
 
+function notConfigured(factory: string): Response {
+  return json(
+    {
+      error: 'webhook_not_configured',
+      message: `Set ${FOPOST_WEBHOOK_SECRET_ENV} or pass { secret } to ${factory}().`,
+    },
+    500,
+  );
+}
+
 async function runRevalidation(
   options: CreateFoPostWebhookHandlerOptions,
   context: FoPostWebhookContext,
@@ -164,21 +194,12 @@ export function createFoPostWebhookHandler(
 ): (request: Request) => Promise<Response> {
   return async function POST(request: Request): Promise<Response> {
     const secret = options.secret ?? process.env[FOPOST_WEBHOOK_SECRET_ENV];
-    if (!secret) {
-      return json(
-        {
-          error: 'webhook_not_configured',
-          message: `Set ${FOPOST_WEBHOOK_SECRET_ENV} or pass { secret } to createFoPostWebhookHandler().`,
-        },
-        500,
-      );
-    }
+    if (!secret) return notConfigured('createFoPostWebhookHandler');
 
     // Read the bytes first. Parsing before verifying would defeat the signature.
     const rawBody = await request.text();
-    const signature = request.headers.get(FOPOST_SIGNATURE_HEADER);
 
-    if (!verifyFoPostSignature({ rawBody, signature, secret })) {
+    if (!(await verifyFoPostSignature({ rawBody, headers: request.headers, secret }))) {
       return json({ error: 'invalid_signature', message: 'Signature verification failed.' }, 401);
     }
 
@@ -214,5 +235,67 @@ export function createFoPostWebhookHandler(
     }
 
     return json({ received: true }, 200);
+  };
+}
+
+export interface ArticleWebhookContext {
+  /** Value of `X-FoPost-Delivery`, or `null` when the header is absent. */
+  deliveryId: string | null;
+  request: Request;
+}
+
+export interface ArticleWebhookOptions {
+  /** The website secret from the blog settings. Defaults to `process.env.FOPOST_WEBHOOK_SECRET`. */
+  secret?: string;
+  /** Receives each published article. Return the URL it now lives at to echo it back to FoPost. */
+  onArticlePublished: (
+    article: ArticlePublishedPayload,
+    context: ArticleWebhookContext,
+  ) => string | void | Promise<string | void>;
+}
+
+/**
+ * Builds the App Router `POST` handler a website target delivers articles to.
+ * Answers `{ ok: true }` to `article.test` and hands `article.published` to the callback.
+ *
+ * ```ts
+ * // app/api/fopost/articles/route.ts
+ * export const POST = articleWebhook({
+ *   onArticlePublished: async (article) => `https://yourbrand.com/blog/${article.slug}`,
+ * });
+ * ```
+ */
+export function articleWebhook(
+  options: ArticleWebhookOptions,
+): (request: Request) => Promise<Response> {
+  return async function POST(request: Request): Promise<Response> {
+    const secret = options.secret ?? process.env[FOPOST_WEBHOOK_SECRET_ENV];
+    if (!secret) return notConfigured('articleWebhook');
+
+    const rawBody = await request.text();
+    let envelope: WebhookEvent;
+    try {
+      envelope = await verifyWebhook(rawBody, request.headers, secret);
+    } catch (error) {
+      if (error instanceof WebhookError && error.code === 'invalid_body') {
+        return json({ error: 'invalid_payload', message: 'Body is not valid JSON.' }, 400);
+      }
+      return json({ error: 'invalid_signature', message: 'Signature verification failed.' }, 401);
+    }
+
+    if (envelope.event === 'article.test') return json({ ok: true }, 200);
+    if (envelope.event !== 'article.published') {
+      return json({ error: 'unknown_event', message: 'Missing or unrecognized event.' }, 400);
+    }
+
+    try {
+      const url = await options.onArticlePublished(envelope.data as ArticlePublishedPayload, {
+        deliveryId: request.headers.get(FOPOST_DELIVERY_HEADER),
+        request,
+      });
+      return json(typeof url === 'string' ? { url } : { ok: true }, 200);
+    } catch {
+      return json({ error: 'handler_failed', message: 'Webhook handler threw.' }, 500);
+    }
   };
 }

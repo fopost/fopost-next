@@ -63,29 +63,35 @@ Owned by the parent SDK; repeated here only where this package depends on it.
 
 ### Webhook signature scheme (verified against the API source)
 
-The API (`fopost/apps/api/src/workers/webhook.worker.ts` and
-`services/webhook-dispatcher.ts`) POSTs `JSON.stringify({ event, data, timestamp })` with:
+The API (`fopost/apps/api/src/workers/webhook.worker.ts`, `services/webhook-dispatcher.ts` and
+`services/blog/publisher.ts`) POSTs `JSON.stringify({ event, data, timestamp })` with:
 
 ```
-X-FoPost-Signature: sha256=<lowercase hex HMAC-SHA256 of the raw body, keyed by the webhook secret>
-X-FoPost-Event:     <event name>
-X-FoPost-Delivery:  <BullMQ job id>
+X-FoPost-Signature:     sha256=<lowercase hex HMAC-SHA256 of the raw body, keyed by the webhook secret>
+X-FoPost-Timestamp:     <unix seconds>
+X-FoPost-Signature-256: sha256=<hex HMAC-SHA256 of "<timestamp>.<raw body>">
+X-FoPost-Event:         <event name>
+X-FoPost-Delivery:      <delivery id>
 ```
 
-There is **no timestamp in the signed string** and no versioned `t=,v1=` scheme — the HMAC covers
-the raw body alone. Verify before parsing: `JSON.parse` then `JSON.stringify` changes the bytes
-and the signature will not match. Compare with `crypto.timingSafeEqual` on equal-length buffers,
-returning false on a length mismatch rather than throwing.
+Verification is `verifyWebhookSignature` from `@fopost/sdk`, never a local HMAC: the timestamped
+signature is preferred and refused past 300 s, the body-only one is the fallback when no timestamp
+header is present. Verify before parsing: `JSON.parse` then `JSON.stringify` changes the bytes and
+the signature will not match. `signFoPostPayload` stays only so tests can sign a body.
 
 Events (`WEBHOOK_EVENTS` in `apps/api/src/handlers/webhooks.ts`): `post.published`, `post.failed`,
 `post.partially_failed`, `delivery.published`, `delivery.failed`, `delivery.delayed`,
-`account.health_changed`. Keep `FOPOST_WEBHOOK_EVENTS` in `src/webhook.ts` in sync with that list.
+`account.health_changed`, `article.published`. Keep `FOPOST_WEBHOOK_EVENTS` in `src/webhook.ts` in
+sync with that list. `articleWebhook` is the receiver for a blog website target: `article.test`
+answers `{ ok: true }`, `article.published` goes to `onArticlePublished`.
 
 ## Parent Dependency
 
 `@fopost/sdk` is published on npm and declared as a normal `dependencies` entry, so CI resolves it
-from the registry with no shim. The constraint is `^0.2.2`: `0.2.1` and `0.2.2` are the only
-published versions, so a `^0.1` range would not install.
+from the registry with no shim. While a wrapper change depends on an unreleased parent, pin the
+`github:fopost/fopost-js#<branch>` ref and swap it for the release range once that version is on
+npm; the git ref ships no `dist/`, so copy a local parent build into `node_modules/@fopost/sdk/dist`
+to typecheck and test.
 
 `next` and `react` are peer dependencies (`^14 || ^15` and `^18.2 || ^19`) and dev dependencies, so
 CI can typecheck against them without forcing a version on consumers.
