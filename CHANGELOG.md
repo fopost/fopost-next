@@ -20,5 +20,5 @@ All notable changes to `@fopost/next` are documented here.
   timestamped `X-FoPost-Signature-256` is preferred and refused after 300 seconds; the body-only
   `X-FoPost-Signature` is accepted only when no timestamp header is sent. `verifyFoPostSignature`
   is now async, returns `Promise<boolean>`, and takes `headers` beside the existing `signature`.
-- `@fopost/sdk` is pinned to its `feature/blog-articles` branch until the release that carries
-  `blog` and `verifyWebhook` ships.
+- `@fopost/sdk` requirement moved to `^0.6.0`, the npm release that carries `blog` and
+  `verifyWebhook`, replacing the `feature/blog-articles` branch pin.
