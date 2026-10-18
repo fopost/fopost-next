@@ -102,6 +102,7 @@ import { composeAndPublish } from './actions';
 | `createPostAction()`     | `posts.create`           |
 | `updatePostAction()`     | `posts.update`           |
 | `publishPostAction()`    | `posts.publish`          |
+| `unpublishPostAction()`  | `posts.unpublish`        |
 | `deletePostAction()`     | `posts.delete`           |
 | `uploadMediaAction()`    | `media.uploadDirect`     |
 | `createFoPostAction(fn)` | anything else in the SDK |
