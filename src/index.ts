@@ -70,6 +70,7 @@ export {
   createPostAction,
   updatePostAction,
   publishPostAction,
+  unpublishPostAction,
   deletePostAction,
   uploadMediaAction,
   type FoPostActionOptions,

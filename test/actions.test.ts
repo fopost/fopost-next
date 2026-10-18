@@ -6,6 +6,7 @@ import {
   createPostAction,
   publishPostAction,
   resetFoPostClientCache,
+  unpublishPostAction,
   uploadMediaAction,
 } from '../src/index.js';
 
@@ -84,6 +85,22 @@ describe('Server Action helpers', () => {
       error: { message: 'Upgrade to publish', status: 402, code: 'subscription_required' },
     });
     expect(structuredClone(result)).toEqual(result);
+  });
+
+  it('unpublishPostAction posts to /v1/posts/:id/unpublish and returns the result', async () => {
+    const unpublished = {
+      post_status: 'unpublished',
+      deliveries: [{ account_id: 'a_1', platform: 'x', status: 'unpublished' }],
+    };
+    const fetchMock = vi.fn(async () => jsonResponse({ data: unpublished }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await unpublishPostAction()('p_1');
+
+    expect(result).toEqual({ ok: true, data: unpublished });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string | URL, RequestInit];
+    expect(String(url)).toMatch(/\/v1\/posts\/p_1\/unpublish$/);
+    expect(init.method).toBe('POST');
   });
 
   it('serializes a transport failure with a null status', async () => {

@@ -6,7 +6,13 @@
  * error class does not survive it.
  */
 
-import type { CreatePostInput, Post, UpdatePostInput, UploadedMedia } from '@fopost/sdk';
+import type {
+  CreatePostInput,
+  Post,
+  UnpublishResult,
+  UpdatePostInput,
+  UploadedMedia,
+} from '@fopost/sdk';
 import { getFoPostClient, type FoPostClientOptions } from './client.js';
 import { toSerializableError, type FoPostActionResult } from './errors.js';
 import { revalidateFoPost, type FoPostRevalidateTargets } from './cache.js';
@@ -68,6 +74,13 @@ export function publishPostAction(
   options: FoPostActionOptions = {},
 ): (id: string) => Promise<FoPostActionResult<unknown>> {
   return createFoPostAction((fopost, id: string) => fopost.posts.publish(id), options);
+}
+
+/** Builds an `unpublish post` Server Action. Takes the post down from every network it is live on. */
+export function unpublishPostAction(
+  options: FoPostActionOptions = {},
+): (id: string) => Promise<FoPostActionResult<UnpublishResult>> {
+  return createFoPostAction((fopost, id: string) => fopost.posts.unpublish(id), options);
 }
 
 /** Builds a `delete post` Server Action. */
