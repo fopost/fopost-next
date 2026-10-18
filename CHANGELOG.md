@@ -2,7 +2,7 @@
 
 All notable changes to `@fopost/next` are documented here.
 
-## Unreleased
+## 0.2.0 - 2026-10-18
 
 ### Added
 
@@ -13,6 +13,9 @@ All notable changes to `@fopost/next` are documented here.
 - `article.published` in `FOPOST_WEBHOOK_EVENTS`, so `createFoPostWebhookHandler` can dispatch
   it.
 - `FOPOST_TIMESTAMP_HEADER` and `FOPOST_TIMESTAMPED_SIGNATURE_HEADER`.
+- `uploadMediaAction()`, a Server Action factory over `media.uploadDirect` that takes a form's
+  `FormData` with a `workspaceId` field and a `file` input and returns the stored item.
+- `foPostTags.media(workspaceId?)`, a cache tag for a workspace's media.
 
 ### Changed
 
