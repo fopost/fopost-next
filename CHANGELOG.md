@@ -2,6 +2,19 @@
 
 All notable changes to `@fopost/next` are documented here.
 
+## 0.3.0 - 2026-10-18
+
+### Added
+
+- `unpublishPostAction()`, a Server Action factory over `posts.unpublish` that takes a post down
+  from every network it is live on and returns the SDK's `UnpublishResult`.
+
+### Changed
+
+- `@fopost/sdk` requirement moved to `^0.7.0`, the release that carries `posts.unpublish` and
+  `schedule: 'queue'` on `CreatePostInput` and `UpdatePostInput`. `createPostAction()` and
+  `updatePostAction()` pass that input through unchanged, so queue scheduling needs no new helper.
+
 ## 0.2.0 - 2026-10-18
 
 ### Added
