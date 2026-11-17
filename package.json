@@ -80,5 +80,9 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "postcss": "8.5.26",
+    "tinypool": "2.1.2"
   }
 }
